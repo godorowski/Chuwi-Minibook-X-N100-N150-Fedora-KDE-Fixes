@@ -1,243 +1,237 @@
-# Chuwi Minibook X N100/N150 Fedora KDE Fixes
+# Chuwi Minibook X N100/N150 Fedora KDE Complete Rotation Fixes
 
-A comprehensive collection of fixes and optimizations for running Fedora Linux with KDE Plasma on Chuwi Minibook X N100/N150 devices.
+This package contains a comprehensive solution for fixing screen rotation issues on Chuwi Minibook X N100/N150 devices running Fedora with KDE desktop environment.
 
-## 📋 Table of Contents
+## What This Fixes
 
-- [Overview](#overview)
-- [Device Compatibility](#device-compatibility)
-- [Quick Start](#quick-start)
-- [Available Fixes](#available-fixes)
-- [Installation Guide](#installation-guide)
-- [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
-- [License](#license)
+This solution addresses two main rotation issues:
 
-## 🖥️ Overview
+1. **GRUB Boot Screen Rotation**: Fixes the login screen and boot process orientation
+2. **KDE Autorotation**: Enables automatic screen rotation based on device orientation using accelerometer
 
-This repository contains essential fixes and configurations to optimize the Chuwi Minibook X N100/N150 experience when running Fedora Linux with KDE Plasma desktop environment. The fixes address common issues including screen rotation, display orientation, and system stability.
+## Prerequisites
 
-## 🔧 Device Compatibility
+- Fedora Linux with KDE desktop environment
+- Chuwi Minibook X N100 or N150 device
+- Root or sudo access
+- GRUB bootloader
+- Accelerometer sensor (iio-sensor-proxy service)
 
-- **Device**: Chuwi Minibook X N100/N150
-- **OS**: Fedora Linux (tested on Fedora 40+)
-- **Desktop Environment**: KDE Plasma
-- **Architecture**: x86_64
-- **Display**: DSI-1 panel with touch support
+## Required Dependencies
 
-## 🚀 Quick Start
-
-### Automated Installation
-
-For the easiest setup, use our automated script:
+The script will check for and install these dependencies:
 
 ```bash
-# Clone the repository
-git clone https://github.com/godorowski/Chuwi-Minibook-X-N100-N150-Fedora-KDE-Fixes.git
-cd Chuwi-Minibook-X-N100-N150-Fedora-KDE-Fixes
+# Required packages
+sudo dnf install bc plasma-workspace systemd
 
-# Make scripts executable
-chmod +x apply_rotation_fixes.sh
-
-# Run the automated fix
-./apply_rotation_fixes.sh
+# Ensure iio-sensor-proxy is running
+sudo systemctl start iio-sensor-proxy
+sudo systemctl enable iio-sensor-proxy
 ```
 
-### Manual Installation
+## Quick Start
 
-Follow the detailed instructions in [Complete_Rotation_Fix_Instructions.md](Complete_Rotation_Fix_Instructions.md) for step-by-step manual configuration.
-
-## 📁 Available Fixes
-
-### 🔄 Screen Rotation Fixes
-
-| File | Description | Status |
-|------|-------------|--------|
-| `apply_rotation_fixes.sh` | **Automated script** - Applies all rotation fixes automatically | ✅ Ready |
-| `Complete_Rotation_Fix_Instructions.md` | **Comprehensive guide** - Manual installation instructions | ✅ Ready |
-| `KDE_Autorotation_Setup_Instructions.txt` | **KDE autorotation** - Advanced autorotation setup | ✅ Ready |
-
-#### What the rotation fixes address:
-
-- **Downloads folder rotation issues** - Fixes incorrectly oriented file manager folders
-- **GRUB boot screen rotation** - Corrects boot screen orientation with `video=dsi-1:panel_orientation=right_side_up fbcon=rotate:1`
-- **Console text readability** - Ensures console text is readable during boot
-- **Desktop environment rotation** - Sets proper display rotation in KDE Plasma
-- **Persistent rotation settings** - Creates autostart entries for consistent behavior
-
-## 📖 Installation Guide
-
-### Prerequisites
-
-- Fedora Linux installed on Chuwi Minibook X N100/N150
-- KDE Plasma desktop environment
-- Internet connection for downloading dependencies
-- Sudo/root access for system modifications
-
-### Step-by-Step Installation
-
-1. **Download the fixes:**
+1. **Navigate to the Downloads folder:**
    ```bash
-   git clone https://github.com/godorowski/Chuwi-Minibook-X-N100-N150-Fedora-KDE-Fixes.git
-   cd Chuwi-Minibook-X-N100-N150-Fedora-KDE-Fixes
+   cd ~/Downloads/chuwi-minibook-rotation-fixes
    ```
 
-2. **Review the documentation:**
-   - Read `Complete_Rotation_Fix_Instructions.md` for detailed information
-   - Check `KDE_Autorotation_Setup_Instructions.txt` for advanced features
-
-3. **Run the automated fix:**
+2. **Run the complete rotation fix script:**
    ```bash
-   chmod +x apply_rotation_fixes.sh
    ./apply_rotation_fixes.sh
    ```
 
-4. **Reboot your system:**
+3. **Reboot your system:**
    ```bash
    sudo reboot
    ```
 
-5. **Verify the fixes:**
-   - Check Downloads folder orientation
-   - Verify boot screen appears correctly
-   - Test console text readability
+4. **Test the fixes:**
+   - Check if boot screen appears correctly oriented
+   - Rotate your device to test automatic screen rotation
+   - Verify login screen orientation
 
-## 🔧 Configuration Details
+## What the Script Does
 
-### GRUB Boot Parameters
+### GRUB Configuration Fixes
 
-The fixes add the following parameters to your GRUB configuration:
+The script modifies `/etc/default/grub` to add these parameters:
+- `video=dsi-1:panel_orientation=right_side_up` - Sets proper panel orientation
+- `fbcon=rotate:1` - Rotates framebuffer console 90 degrees clockwise
+
+### KDE Autorotation Setup
+
+The script creates a complete autorotation system:
+
+1. **Autorotation Script** (`~/.local/bin/kde-autorotate`):
+   - Monitors accelerometer data every 0.5 seconds
+   - Uses working configuration from `KDE_Autorotation_Setup_Instructions.txt`
+   - Automatically rotates screen based on device orientation
+   - Uses `kscreen-doctor` for screen control
+
+2. **Systemd Service** (`~/.config/systemd/user/kde-autorotate.service`):
+   - Runs autorotation script automatically at login
+   - Restarts automatically if it crashes
+   - Starts after graphical session is ready
+
+3. **Configuration**:
+   - `ORIENTATION_OFFSET=0` (no offset - working config)
+   - `THRESHOLD=0.5` (sensitivity for rotation detection)
+   - `DISPLAY_NAME="DSI-1"` (Chuwi Minibook X display)
+
+## Working Configuration
+
+Based on the working setup from `KDE_Autorotation_Setup_Instructions.txt`:
+
+- **X positive** → "left" rotation
+- **X negative** → "right" rotation  
+- **Y positive** → "inverted" rotation
+- **Y negative** → "none" rotation
+- **No orientation offset** (direct accelerometer reading)
+
+## Service Management
+
+After installation, you can manage the autorotation service:
 
 ```bash
-GRUB_CMDLINE_LINUX_DEFAULT="quiet splash video=dsi-1:panel_orientation=right_side_up fbcon=rotate:1"
+# Check service status
+systemctl --user status kde-autorotate.service
+
+# Stop autorotation
+systemctl --user stop kde-autorotate.service
+
+# Start autorotation
+systemctl --user start kde-autorotate.service
+
+# View real-time logs
+journalctl --user -u kde-autorotate.service -f
+
+# Disable auto-start
+systemctl --user disable kde-autorotate.service
+
+# Re-enable auto-start
+systemctl --user enable kde-autorotate.service
 ```
 
-**Parameter explanations:**
-- `video=dsi-1:panel_orientation=right_side_up`: Sets DSI-1 display panel orientation
-- `fbcon=rotate:1`: Rotates framebuffer console by 90 degrees clockwise
+## Verification
 
-### Display Rotation Settings
+After running the script and rebooting:
 
-- **Desktop rotation**: Set to 90 degrees clockwise (right)
-- **Autostart entry**: Created for persistent rotation across reboots
-- **File manager cache**: Cleared to resolve folder orientation issues
+1. **Check GRUB boot screen** - Should appear correctly oriented
+2. **Verify console text** - Should be readable during boot
+3. **Test device rotation** - Screen should automatically rotate
+4. **Check service status** - Autorotation service should be running
 
-## 🛠️ Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
-#### Downloads Folder Still Rotated
+1. **Autorotation not working:**
+   ```bash
+   # Check if accelerometer is available
+   ls /sys/bus/iio/devices/
+   cat /sys/bus/iio/devices/iio:device0/name
+   
+   # Check service status
+   systemctl --user status kde-autorotate.service
+   
+   # View service logs
+   journalctl --user -u kde-autorotate.service
+   ```
+
+2. **Wrong rotation directions:**
+   - Edit `~/.local/bin/kde-autorotate`
+   - Adjust the `ORIENTATION_OFFSET` value (0-3)
+   - Restart service: `systemctl --user restart kde-autorotate.service`
+
+3. **GRUB changes not applied:**
+   ```bash
+   # Verify GRUB configuration
+   grep "GRUB_CMDLINE_LINUX_DEFAULT" /etc/default/grub
+   
+   # Rebuild GRUB if needed
+   sudo grub2-mkconfig -o /boot/grub2/grub.cfg
+   ```
+
+4. **Display name issues:**
+   ```bash
+   # Check available displays
+   kscreen-doctor -o
+   
+   # Update DISPLAY_NAME in ~/.local/bin/kde-autorotate if needed
+   ```
+
+### Recovery
+
+If something goes wrong, restore the GRUB backup:
+
 ```bash
-# Clear file manager caches
-rm -rf ~/.cache/dolphin/
-rm -rf ~/.cache/thumbnails/
-
-# Reset Dolphin configuration
-rm -f ~/.config/dolphinrc
-
-# Restart file manager
-killall dolphin && dolphin &
-```
-
-#### GRUB Changes Not Applied
-```bash
-# Verify GRUB configuration
-grep "GRUB_CMDLINE_LINUX_DEFAULT" /etc/default/grub
-
-# Update GRUB manually
-sudo grub2-mkconfig -o /boot/grub2/grub.cfg
-```
-
-#### Display Rotation Not Working
-```bash
-# Check available displays
-xrandr --query
-
-# Set rotation manually
-xrandr --output DSI-1 --rotate right
-```
-
-### Recovery Steps
-
-If something goes wrong, you can restore the original configuration:
-
-```bash
-# Restore GRUB configuration
 sudo cp /etc/default/grub.backup /etc/default/grub
 sudo grub2-mkconfig -o /boot/grub2/grub.cfg
-
-# Reset Downloads folder
-rm -rf ~/Downloads/.directory
-rm -rf ~/.cache/dolphin/
-
-# Reset display settings
-xrandr --output DSI-1 --rotate normal
+sudo reboot
 ```
 
-## 📊 System Requirements
+To disable autorotation:
 
-- **Minimum RAM**: 4GB (8GB recommended)
-- **Storage**: 32GB free space
-- **Network**: Internet connection for updates
-- **Graphics**: Integrated Intel graphics (N100/N150)
+```bash
+systemctl --user stop kde-autorotate.service
+systemctl --user disable kde-autorotate.service
+```
 
-## 🔍 Testing
+## Configuration Options
 
-The fixes have been tested on:
-- Chuwi Minibook X N100 with Fedora 40 KDE
-- Chuwi Minibook X N150 with Fedora 41 KDE
-- Various kernel versions (6.14+)
+You can customize the autorotation behavior by editing `~/.local/bin/kde-autorotate`:
 
-## 📝 Contributing
+- **ORIENTATION_OFFSET**: 
+  - `0` = No offset (default, working config)
+  - `1` = 90 degrees clockwise
+  - `2` = 180 degrees (fixes upside-down screen)
+  - `3` = 90 degrees counter-clockwise
 
-Contributions are welcome! Please feel free to:
+- **THRESHOLD**: Sensitivity for rotation detection (default: 0.5)
+- **DISPLAY_NAME**: Your display name (default: "DSI-1")
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+## Files Created
 
-### Reporting Issues
+The script creates these files:
 
-When reporting issues, please include:
-- Device model (N100 or N150)
-- Fedora version
-- Kernel version (`uname -r`)
-- KDE Plasma version
-- Steps to reproduce the issue
+- `~/.local/bin/kde-autorotate` - Main autorotation script
+- `~/.config/systemd/user/kde-autorotate.service` - Systemd service
+- `/etc/default/grub.backup` - Backup of original GRUB config
 
-## 📄 License
+## System Information
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+- **Target Hardware:** Chuwi Minibook X N100/N150
+- **OS:** Fedora Linux
+- **Desktop Environment:** KDE Plasma
+- **Display:** DSI-1 panel
+- **Bootloader:** GRUB
+- **Accelerometer:** mxc4005 (detected automatically)
 
-## 🙏 Acknowledgments
+## Based On
 
-- Fedora Linux community for excellent hardware support
-- KDE Plasma team for the amazing desktop environment
-- Chuwi for creating innovative mini laptop devices
-- Contributors who have tested and improved these fixes
+This solution is based on the working configuration documented in:
+- `KDE_Autorotation_Setup_Instructions.txt` - For autorotation setup
+- `Complete_Rotation_Fix_Instructions.md` - For GRUB configuration
 
-## 📞 Support
+## Support
 
-- **Issues**: [GitHub Issues](https://github.com/godorowski/Chuwi-Minibook-X-N100-N150-Fedora-KDE-Fixes/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/godorowski/Chuwi-Minibook-X-N100-N150-Fedora-KDE-Fixes/discussions)
+If you encounter issues:
 
-## 📈 Changelog
+1. Check the troubleshooting section above
+2. Verify your system matches the prerequisites
+3. Check service logs: `journalctl --user -u kde-autorotate.service`
+4. Ensure accelerometer is working: `cat /sys/bus/iio/devices/iio:device0/in_accel_*_raw`
 
-### v1.0.0 (Current)
-- ✅ Initial release
-- ✅ Screen rotation fixes
-- ✅ GRUB configuration optimization
-- ✅ Downloads folder orientation fix
-- ✅ Automated installation script
-- ✅ Comprehensive documentation
+## Notes
+
+- These fixes are specifically designed for Chuwi Minibook X devices
+- GRUB changes require a reboot to take effect
+- Autorotation starts automatically after login
+- Keep backups of all modified configuration files
+- Test changes in a safe environment before applying to production systems
 
 ---
 
-**⚠️ Disclaimer**: These fixes are provided as-is. Always backup your system before applying changes. The authors are not responsible for any data loss or system issues that may occur.
-
-**💡 Tip**: For the best experience, ensure your system is fully updated before applying these fixes:
-```bash
-sudo dnf update
-```
+**Warning:** Always backup your system before making these changes. Incorrect GRUB configuration can prevent your system from booting.
