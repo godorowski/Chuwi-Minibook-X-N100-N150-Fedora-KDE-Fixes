@@ -3,6 +3,12 @@
 # Chuwi Minibook X N100/N150 Fedora KDE Complete Rotation Fixes Script
 # This script applies both GRUB boot parameter fixes and KDE autorotation setup
 # Based on the working configuration from KDE_Autorotation_Setup_Instructions.txt
+#
+# UPDATED FIXES (v2.0):
+# - Fixed GRUB configuration to properly handle GRUB_CMDLINE_LINUX_DEFAULT
+# - Added Wayland environment variables to systemd service for proper kscreen-doctor operation
+# - Enhanced autorotation script with better error handling and debugging output
+# - Improved compatibility with Wayland + XWayland environments
 
 set -e  # Exit on any error
 
@@ -127,10 +133,12 @@ modify_grub() {
     
     # Create a temporary file with the modified configuration
     temp_file=$(mktemp)
+    grub_default_found=false
     
     # Process the GRUB file and add rotation parameters
     while IFS= read -r line; do
         if [[ $line == GRUB_CMDLINE_LINUX_DEFAULT=* ]]; then
+            grub_default_found=true
             # Extract the current parameters
             current_params=$(echo "$line" | sed 's/GRUB_CMDLINE_LINUX_DEFAULT="//' | sed 's/"$//')
             
@@ -138,13 +146,33 @@ modify_grub() {
             if [[ $current_params == *"video=dsi-1:panel_orientation=right_side_up"* ]]; then
                 echo "$line" >> "$temp_file"
             else
+                # Remove any existing rotation parameters to avoid duplicates
+                current_params=$(echo "$current_params" | sed 's/video=DSI-1:panel_orientation=right_side_up fbcon=rotate:1//g' | sed 's/video=dsi-1:panel_orientation=right_side_up fbcon=rotate:1//g')
                 new_params="${current_params} video=dsi-1:panel_orientation=right_side_up fbcon=rotate:1"
                 echo "GRUB_CMDLINE_LINUX_DEFAULT=\"${new_params}\"" >> "$temp_file"
+            fi
+        elif [[ $line == GRUB_CMDLINE_LINUX=* ]]; then
+            # Handle case where GRUB_CMDLINE_LINUX_DEFAULT doesn't exist but GRUB_CMDLINE_LINUX does
+            if [[ $grub_default_found == false ]]; then
+                current_params=$(echo "$line" | sed 's/GRUB_CMDLINE_LINUX="//' | sed 's/"$//')
+                # Remove existing rotation parameters if they exist
+                current_params=$(echo "$current_params" | sed 's/video=DSI-1:panel_orientation=right_side_up fbcon=rotate:1//g' | sed 's/video=dsi-1:panel_orientation=right_side_up fbcon=rotate:1//g')
+                new_params="${current_params} video=dsi-1:panel_orientation=right_side_up fbcon=rotate:1"
+                echo "GRUB_CMDLINE_LINUX_DEFAULT=\"${new_params}\"" >> "$temp_file"
+                echo "$line" >> "$temp_file"
+                grub_default_found=true
+            else
+                echo "$line" >> "$temp_file"
             fi
         else
             echo "$line" >> "$temp_file"
         fi
     done < /etc/default/grub
+    
+    # If no GRUB_CMDLINE_LINUX_DEFAULT was found, add it
+    if [[ $grub_default_found == false ]]; then
+        echo "GRUB_CMDLINE_LINUX_DEFAULT=\"video=dsi-1:panel_orientation=right_side_up fbcon=rotate:1\"" >> "$temp_file"
+    fi
     
     # Replace the original file
     sudo cp "$temp_file" /etc/default/grub
@@ -215,7 +243,13 @@ get_current_rotation() {
 # Function to set rotation
 set_rotation() {
     local rotation=$1
-    kscreen-doctor "output.$DISPLAY_NAME.rotation.$rotation" >/dev/null 2>&1
+    echo "Setting rotation to: $rotation"
+    kscreen-doctor "output.$DISPLAY_NAME.rotation.$rotation" 2>&1
+    local exit_code=$?
+    if [ $exit_code -ne 0 ]; then
+        echo "Warning: kscreen-doctor failed with exit code $exit_code"
+        echo "Display: $DISPLAY_NAME, Rotation: $rotation"
+    fi
 }
 
 # Function to read accelerometer values
@@ -340,6 +374,8 @@ ExecStart=%h/.local/bin/kde-autorotate
 Restart=always
 RestartSec=5
 Environment=DISPLAY=:0
+Environment=XDG_SESSION_TYPE=wayland
+Environment=WAYLAND_DISPLAY=wayland-0
 
 [Install]
 WantedBy=default.target
@@ -419,6 +455,8 @@ show_final_instructions() {
     echo "1. ✅ GRUB boot parameters for login screen rotation"
     echo "2. ✅ KDE autorotation script with accelerometer monitoring"
     echo "3. ✅ Systemd service for automatic autorotation startup"
+    echo "4. ✅ Wayland environment compatibility fixes"
+    echo "5. ✅ Enhanced error handling and debugging output"
     echo
     echo "Next steps:"
     echo "1. Reboot your system: sudo reboot"

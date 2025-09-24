@@ -32,9 +32,9 @@ sudo systemctl enable iio-sensor-proxy
 
 ## Quick Start
 
-1. **Download script and go to download folder:**
+1. **Navigate to the Downloads folder:**
    ```bash
-   cd ~/Downloads/
+   cd ~/Downloads/chuwi-minibook-rotation-fixes
    ```
 
 2. **Run the complete rotation fix script:**
