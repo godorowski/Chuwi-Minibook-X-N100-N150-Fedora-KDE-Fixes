@@ -2,7 +2,6 @@
 
 # Complete Screen Rotation Fix Script
 # This script applies all rotation fixes including Downloads folder and GRUB configuration
-# Created: $(date)
 
 set -e  # Exit on any error
 
