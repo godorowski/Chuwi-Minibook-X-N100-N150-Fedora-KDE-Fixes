@@ -230,10 +230,13 @@ create_kde_autorotation_script() {
 # Configuration
 ACCEL_DEVICE="/sys/bus/iio/devices/iio:device0"
 SCALE=$(cat "$ACCEL_DEVICE/in_accel_scale" 2>/dev/null || echo "0.0009765625")
-THRESHOLD=0.5  # Sensitivity threshold for rotation detection
+THRESHOLD=2.5  # Sensitivity threshold for rotation detection (ultra-low sensitivity - requires ~15-20 degrees movement)
+HYSTERESIS_THRESHOLD=1.8  # Lower threshold for switching back (prevents rapid switching between orientations)
 ORIENTATION_OFFSET=0  # No offset - direct accelerometer reading (working config)
 CURRENT_ROTATION=""
 DISPLAY_NAME="DSI-1"  # Chuwi Minibook X display name
+STABLE_COUNT=0  # Counter for stable readings before changing rotation
+STABLE_THRESHOLD=7  # Number of consecutive stable readings required (about 1.4 seconds delay)
 
 # Function to get current rotation value
 get_current_rotation() {
@@ -266,11 +269,12 @@ read_accelerometer() {
     echo "$x $y $z"
 }
 
-# Function to determine orientation
+# Function to determine orientation with hysteresis
 determine_orientation() {
     local x=$1
     local y=$2
     local z=$3
+    local current_orientation=$4
     
     # Apply orientation offset (similar to GNOME's setting)
     if [ "$ORIENTATION_OFFSET" = "1" ]; then
@@ -289,16 +293,23 @@ determine_orientation() {
         y=$temp
     fi
     
-    # Determine orientation based on accelerometer values
+    # Determine orientation based on accelerometer values with hysteresis
     # Working configuration for Chuwi Minibook X:
     # X positive → "left" rotation
     # X negative → "right" rotation  
     # Y positive → "inverted" rotation
     # Y negative → "none" rotation
-    local x_gt_threshold=$(echo "$x > $THRESHOLD" | bc -l)
-    local x_lt_neg_threshold=$(echo "$x < -$THRESHOLD" | bc -l)
-    local y_gt_threshold=$(echo "$y > $THRESHOLD" | bc -l)
-    local y_lt_neg_threshold=$(echo "$y < -$THRESHOLD" | bc -l)
+    
+    # Use different thresholds based on current orientation (hysteresis)
+    local threshold_to_use=$THRESHOLD
+    if [ -n "$current_orientation" ] && [ "$current_orientation" != "none" ]; then
+        threshold_to_use=$HYSTERESIS_THRESHOLD
+    fi
+    
+    local x_gt_threshold=$(echo "$x > $threshold_to_use" | bc -l)
+    local x_lt_neg_threshold=$(echo "$x < -$threshold_to_use" | bc -l)
+    local y_gt_threshold=$(echo "$y > $threshold_to_use" | bc -l)
+    local y_lt_neg_threshold=$(echo "$y < -$threshold_to_use" | bc -l)
     
     if [ "$x_gt_threshold" = "1" ]; then
         echo "left"
@@ -325,7 +336,9 @@ echo "KDE Auto-rotation started for Chuwi Minibook X"
 echo "Monitoring accelerometer: $ACCEL_DEVICE"
 echo "Display: $DISPLAY_NAME"
 echo "Orientation offset: $ORIENTATION_OFFSET"
-echo "Threshold: $THRESHOLD"
+echo "Threshold: $THRESHOLD (hysteresis: $HYSTERESIS_THRESHOLD)"
+echo "Stability requirement: $STABLE_THRESHOLD consecutive readings (~1.4 seconds)"
+echo "Check interval: 0.2 seconds"
 echo "Press Ctrl+C to stop"
 echo ""
 
@@ -333,18 +346,30 @@ while true; do
     # Read accelerometer values
     read x y z <<< $(read_accelerometer)
     
-    # Determine orientation
-    orientation=$(determine_orientation "$x" "$y" "$z")
+    # Determine orientation with hysteresis
+    orientation=$(determine_orientation "$x" "$y" "$z" "$CURRENT_ROTATION")
     
-    # Only change rotation if orientation has changed
+    # Check if orientation has changed
     if [ "$orientation" != "$CURRENT_ROTATION" ]; then
-        echo "$(date): Rotating to $orientation (x=$x, y=$y, z=$z)"
-        set_rotation "$orientation"
-        CURRENT_ROTATION="$orientation"
+        # Increment stable count for new orientation
+        STABLE_COUNT=$((STABLE_COUNT + 1))
+        
+        # Only change rotation after stable readings
+        if [ $STABLE_COUNT -ge $STABLE_THRESHOLD ]; then
+            echo "$(date): Rotating to $orientation (x=$x, y=$y, z=$z) [stable for $STABLE_COUNT readings]"
+            set_rotation "$orientation"
+            CURRENT_ROTATION="$orientation"
+            STABLE_COUNT=0  # Reset counter after successful rotation
+        else
+            echo "$(date): Detected $orientation but waiting for stability (x=$x, y=$y, z=$z) [stable: $STABLE_COUNT/$STABLE_THRESHOLD]"
+        fi
+    else
+        # Reset stable count if orientation hasn't changed
+        STABLE_COUNT=0
     fi
     
     # Sleep for a short interval
-    sleep 0.5
+    sleep 0.2
 done
 EOF
     

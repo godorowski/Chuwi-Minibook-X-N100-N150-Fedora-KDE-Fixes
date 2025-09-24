@@ -77,7 +77,9 @@ The script creates a complete autorotation system:
 
 3. **Configuration**:
    - `ORIENTATION_OFFSET=0` (no offset - working config)
-   - `THRESHOLD=0.5` (sensitivity for rotation detection)
+   - `THRESHOLD=2.5` (ultra-low sensitivity for rotation detection)
+   - `HYSTERESIS_THRESHOLD=1.8` (prevents rapid switching between orientations)
+   - `STABLE_THRESHOLD=7` (requires 7 consecutive stable readings before rotation)
    - `DISPLAY_NAME="DSI-1"` (Chuwi Minibook X display)
 
 ## Working Configuration
@@ -89,6 +91,22 @@ Based on the working setup from `KDE_Autorotation_Setup_Instructions.txt`:
 - **Y positive** → "inverted" rotation
 - **Y negative** → "none" rotation
 - **No orientation offset** (direct accelerometer reading)
+
+## Sensitivity and Timing
+
+**Ultra-Low Sensitivity Settings:**
+- **Threshold**: `2.5` (requires significant movement ~15-20 degrees)
+- **Hysteresis**: `1.8` (prevents rapid switching)
+- **Stability**: Requires 7 consecutive readings (about 1.4 seconds)
+- **Check interval**: 0.2 seconds
+
+**Rotation Timing:**
+- **Small movements (1-8 degrees)**: Completely ignored
+- **Medium movements (8-15 degrees)**: May be detected but require holding position
+- **Large movements (15+ degrees)**: Will trigger rotation after 1.4+ seconds of stability
+- **Deliberate rotations**: Must be held in position for ~1.4 seconds before screen rotates
+
+This configuration prevents accidental rotations from small movements while still allowing intentional rotations with deliberate, sustained positioning.
 
 ## Service Management
 
@@ -120,8 +138,13 @@ After running the script and rebooting:
 
 1. **Check GRUB boot screen** - Should appear correctly oriented
 2. **Verify console text** - Should be readable during boot
-3. **Test device rotation** - Screen should automatically rotate
+3. **Test device rotation** - Screen should automatically rotate (with ~1.4 second delay)
 4. **Check service status** - Autorotation service should be running
+
+**Note**: Due to ultra-low sensitivity settings, rotations require:
+- Significant movement (~15-20 degrees)
+- Holding the position for ~1.4 seconds
+- Small movements (1-8 degrees) are ignored
 
 ## Troubleshooting
 
@@ -189,7 +212,20 @@ You can customize the autorotation behavior by editing `~/.local/bin/kde-autorot
   - `2` = 180 degrees (fixes upside-down screen)
   - `3` = 90 degrees counter-clockwise
 
-- **THRESHOLD**: Sensitivity for rotation detection (default: 0.5)
+- **THRESHOLD**: Sensitivity for rotation detection (default: 2.5)
+  - Higher values = less sensitive (requires more movement)
+  - Lower values = more sensitive (responds to smaller movements)
+  - Recommended range: 1.5-3.0
+
+- **HYSTERESIS_THRESHOLD**: Threshold for switching back (default: 1.8)
+  - Should be lower than THRESHOLD to prevent rapid switching
+  - Recommended: 70-80% of THRESHOLD value
+
+- **STABLE_THRESHOLD**: Consecutive readings required (default: 7)
+  - Higher values = more stable (longer delay before rotation)
+  - Lower values = more responsive (faster rotation)
+  - Recommended range: 3-10
+
 - **DISPLAY_NAME**: Your display name (default: "DSI-1")
 
 ## Files Created
