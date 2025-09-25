@@ -1,0 +1,16 @@
+[Unit]
+Description=KDE Auto-rotation Service for Chuwi Minibook X
+After=graphical-session.target
+Wants=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/kde-autorotate
+Restart=always
+RestartSec=5
+Environment=DISPLAY=:0
+Environment=XDG_SESSION_TYPE=wayland
+Environment=WAYLAND_DISPLAY=wayland-0
+
+[Install]
+WantedBy=default.target

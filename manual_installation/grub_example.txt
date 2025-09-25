@@ -1,0 +1,8 @@
+# GRUB Configuration Example
+# Add these parameters to GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub:
+
+GRUB_CMDLINE_LINUX_DEFAULT="quiet video=dsi-1:panel_orientation=right_side_up fbcon=rotate:1"
+
+# After modifying /etc/default/grub, update GRUB with:
+# sudo grub2-mkconfig -o /boot/grub2/grub.cfg
+# sudo reboot

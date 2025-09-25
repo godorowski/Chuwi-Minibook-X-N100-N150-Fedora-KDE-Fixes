@@ -37,20 +37,62 @@ sudo systemctl enable iio-sensor-proxy
    cd ~/Downloads/chuwi-minibook-rotation-fixes
    ```
 
-2. **Run the complete rotation fix script:**
+2. **Run the rotation fix script:**
    ```bash
    ./apply_rotation_fixes.sh
    ```
 
-3. **Reboot your system:**
+3. **Select installation option:**
+   The script will present you with a menu:
+   - **Option 1**: GRUB fixes only (fixes boot screen orientation)
+   - **Option 2**: Autorotation only (enables automatic screen rotation)
+   - **Option 3**: Both GRUB fixes and autorotation (complete solution)
+   - **Option 4**: Manual installation (copy files to current directory)
+   - **Option 5**: Exit
+
+4. **Follow the instructions** based on your selected option
+
+5. **Reboot your system** (if GRUB fixes were applied):
    ```bash
    sudo reboot
    ```
 
-4. **Test the fixes:**
-   - Check if boot screen appears correctly oriented
-   - Rotate your device to test automatic screen rotation
+6. **Test the fixes:**
+   - Check if boot screen appears correctly oriented (if GRUB fixes applied)
+   - Rotate your device to test automatic screen rotation (if autorotation enabled)
    - Verify login screen orientation
+
+## Installation Options
+
+The script now offers flexible installation options to suit different needs:
+
+### Option 1: GRUB Fixes Only
+- **Purpose**: Fixes boot screen and login screen orientation
+- **What it does**: Modifies GRUB configuration to add rotation parameters
+- **When to use**: If you only have issues with boot/login screen orientation
+- **Requires**: Reboot to take effect
+
+### Option 2: Autorotation Only
+- **Purpose**: Enables automatic screen rotation based on device orientation
+- **What it does**: Creates autorotation script and systemd service
+- **When to use**: If you only want automatic rotation during desktop use
+- **Requires**: No reboot needed, starts immediately
+
+### Option 3: Both GRUB and Autorotation (Complete Solution)
+- **Purpose**: Comprehensive fix for all rotation issues
+- **What it does**: Applies both GRUB fixes and autorotation setup
+- **When to use**: For complete rotation solution (recommended)
+- **Requires**: Reboot for GRUB changes
+
+### Option 4: Manual Installation
+- **Purpose**: Copy files for manual installation
+- **What it does**: Creates a `manual_installation` directory with all necessary files
+- **When to use**: If you prefer to install manually or want to customize the installation
+- **Files created**:
+  - `kde-autorotate` - Autorotation script
+  - `kde-autorotate.service` - Systemd service file
+  - `grub_example.txt` - GRUB configuration example
+  - `INSTALLATION_INSTRUCTIONS.md` - Detailed manual installation guide
 
 ## What the Script Does
 
@@ -228,13 +270,58 @@ You can customize the autorotation behavior by editing `~/.local/bin/kde-autorot
 
 - **DISPLAY_NAME**: Your display name (default: "DSI-1")
 
+## Manual Installation
+
+If you choose Option 4 (Manual Installation), the script will create a `manual_installation` directory with all necessary files and detailed instructions.
+
+### Manual Installation Steps
+
+1. **Run the script and select Option 4:**
+   ```bash
+   ./apply_rotation_fixes.sh
+   # Select option 4
+   ```
+
+2. **Navigate to the manual installation directory:**
+   ```bash
+   cd manual_installation
+   ```
+
+3. **Follow the instructions in `INSTALLATION_INSTRUCTIONS.md`**
+
+### Manual Installation Files
+
+The manual installation includes:
+
+- **`kde-autorotate`** - Complete autorotation script
+- **`kde-autorotate.service`** - Systemd service file
+- **`grub_example.txt`** - GRUB configuration example
+- **`INSTALLATION_INSTRUCTIONS.md`** - Step-by-step manual installation guide
+
+### Manual Installation Benefits
+
+- **Full control**: Install only what you need
+- **Customization**: Modify files before installation
+- **Understanding**: Learn exactly what each component does
+- **Troubleshooting**: Easier to debug issues
+- **Backup**: Keep original files for reference
+
 ## Files Created
 
-The script creates these files:
+The script creates these files (depending on selected options):
 
+### Autorotation Files (Options 2, 3, or Manual)
 - `~/.local/bin/kde-autorotate` - Main autorotation script
 - `~/.config/systemd/user/kde-autorotate.service` - Systemd service
+
+### GRUB Files (Options 1, 3, or Manual)
 - `/etc/default/grub.backup` - Backup of original GRUB config
+
+### Manual Installation Files (Option 4)
+- `manual_installation/kde-autorotate` - Autorotation script
+- `manual_installation/kde-autorotate.service` - Systemd service
+- `manual_installation/grub_example.txt` - GRUB configuration example
+- `manual_installation/INSTALLATION_INSTRUCTIONS.md` - Installation guide
 
 ## System Information
 

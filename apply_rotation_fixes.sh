@@ -471,65 +471,518 @@ verify_autorotation() {
     fi
 }
 
+# Function to show installation menu
+show_installation_menu() {
+    echo
+    echo "=========================================="
+    echo "Chuwi Minibook X Rotation Fixes Installer"
+    echo "=========================================="
+    echo
+    echo "Please select an installation option:"
+    echo
+    echo "1) GRUB fixes only (fixes boot screen orientation)"
+    echo "2) Autorotation only (enables automatic screen rotation)"
+    echo "3) Both GRUB fixes and autorotation (complete solution)"
+    echo "4) Manual installation (copy files to current directory)"
+    echo "5) Exit"
+    echo
+    read -p "Enter your choice (1-5): " choice
+    
+    case $choice in
+        1)
+            INSTALL_GRUB=true
+            INSTALL_AUTOROTATION=false
+            INSTALL_MANUAL=false
+            ;;
+        2)
+            INSTALL_GRUB=false
+            INSTALL_AUTOROTATION=true
+            INSTALL_MANUAL=false
+            ;;
+        3)
+            INSTALL_GRUB=true
+            INSTALL_AUTOROTATION=true
+            INSTALL_MANUAL=false
+            ;;
+        4)
+            INSTALL_GRUB=false
+            INSTALL_AUTOROTATION=false
+            INSTALL_MANUAL=true
+            ;;
+        5)
+            print_status "Installation cancelled by user"
+            exit 0
+            ;;
+        *)
+            print_error "Invalid choice. Please enter 1, 2, 3, 4, or 5."
+            show_installation_menu
+            ;;
+    esac
+}
+
+# Function to copy files for manual installation
+copy_files_for_manual_installation() {
+    print_status "Copying files for manual installation..."
+    
+    # Create manual installation directory
+    mkdir -p manual_installation
+    
+    # Copy autorotation script
+    if [[ -f ~/.local/bin/kde-autorotate ]]; then
+        cp ~/.local/bin/kde-autorotate manual_installation/
+        print_success "Autorotation script copied to manual_installation/kde-autorotate"
+    else
+        # Create the script content for manual installation
+        cat > manual_installation/kde-autorotate << 'EOF'
+#!/bin/bash
+
+# KDE Auto-rotation script for Chuwi Minibook X
+# Monitors accelerometer and rotates screen based on device orientation
+# Based on working configuration from KDE_Autorotation_Setup_Instructions.txt
+
+# Configuration
+ACCEL_DEVICE="/sys/bus/iio/devices/iio:device0"
+SCALE=$(cat "$ACCEL_DEVICE/in_accel_scale" 2>/dev/null || echo "0.0009765625")
+THRESHOLD=2.5  # Sensitivity threshold for rotation detection (ultra-low sensitivity - requires ~15-20 degrees movement)
+HYSTERESIS_THRESHOLD=1.8  # Lower threshold for switching back (prevents rapid switching between orientations)
+ORIENTATION_OFFSET=0  # No offset - direct accelerometer reading (working config)
+CURRENT_ROTATION=""
+DISPLAY_NAME="DSI-1"  # Chuwi Minibook X display name
+STABLE_COUNT=0  # Counter for stable readings before changing rotation
+STABLE_THRESHOLD=7  # Number of consecutive stable readings required (about 1.4 seconds delay)
+
+# Function to get current rotation value
+get_current_rotation() {
+    kscreen-doctor -o | grep "Rotation:" | awk '{print $2}' 2>/dev/null || echo "none"
+}
+
+# Function to set rotation
+set_rotation() {
+    local rotation=$1
+    echo "Setting rotation to: $rotation"
+    kscreen-doctor "output.$DISPLAY_NAME.rotation.$rotation" 2>&1
+    local exit_code=$?
+    if [ $exit_code -ne 0 ]; then
+        echo "Warning: kscreen-doctor failed with exit code $exit_code"
+        echo "Display: $DISPLAY_NAME, Rotation: $rotation"
+    fi
+}
+
+# Function to read accelerometer values
+read_accelerometer() {
+    local x_raw=$(cat "$ACCEL_DEVICE/in_accel_x_raw" 2>/dev/null || echo "0")
+    local y_raw=$(cat "$ACCEL_DEVICE/in_accel_y_raw" 2>/dev/null || echo "0")
+    local z_raw=$(cat "$ACCEL_DEVICE/in_accel_z_raw" 2>/dev/null || echo "0")
+    
+    # Convert to actual values using scale
+    local x=$(echo "$x_raw * $SCALE" | bc -l)
+    local y=$(echo "$y_raw * $SCALE" | bc -l)
+    local z=$(echo "$z_raw * $SCALE" | bc -l)
+    
+    echo "$x $y $z"
+}
+
+# Function to determine orientation with hysteresis
+determine_orientation() {
+    local x=$1
+    local y=$2
+    local z=$3
+    local current_orientation=$4
+    
+    # Apply orientation offset (similar to GNOME's setting)
+    if [ "$ORIENTATION_OFFSET" = "1" ]; then
+        # Offset by 90 degrees clockwise
+        local temp=$x
+        x=$y
+        y=$(echo "-$temp" | bc -l)
+    elif [ "$ORIENTATION_OFFSET" = "2" ]; then
+        # Offset by 180 degrees
+        x=$(echo "-1 * $x" | bc -l)
+        y=$(echo "-1 * $y" | bc -l)
+    elif [ "$ORIENTATION_OFFSET" = "3" ]; then
+        # Offset by 90 degrees counter-clockwise
+        local temp=$x
+        x=$(echo "-1 * $y" | bc -l)
+        y=$temp
+    fi
+    
+    # Determine orientation based on accelerometer values with hysteresis
+    # Working configuration for Chuwi Minibook X:
+    # X positive → "left" rotation
+    # X negative → "right" rotation  
+    # Y positive → "inverted" rotation
+    # Y negative → "none" rotation
+    
+    # Use different thresholds based on current orientation (hysteresis)
+    local threshold_to_use=$THRESHOLD
+    if [ -n "$current_orientation" ] && [ "$current_orientation" != "none" ]; then
+        threshold_to_use=$HYSTERESIS_THRESHOLD
+    fi
+    
+    local x_gt_threshold=$(echo "$x > $threshold_to_use" | bc -l)
+    local x_lt_neg_threshold=$(echo "$x < -$threshold_to_use" | bc -l)
+    local y_gt_threshold=$(echo "$y > $threshold_to_use" | bc -l)
+    local y_lt_neg_threshold=$(echo "$y < -$threshold_to_use" | bc -l)
+    
+    if [ "$x_gt_threshold" = "1" ]; then
+        echo "left"
+    elif [ "$x_lt_neg_threshold" = "1" ]; then
+        echo "right"
+    elif [ "$y_gt_threshold" = "1" ]; then
+        echo "inverted"
+    elif [ "$y_lt_neg_threshold" = "1" ]; then
+        echo "none"
+    else
+        echo "none"  # Default to normal orientation
+    fi
+}
+
+# Check if accelerometer is available
+if [[ ! -f "$ACCEL_DEVICE/in_accel_x_raw" ]]; then
+    echo "Error: Accelerometer device not found at $ACCEL_DEVICE"
+    echo "Please ensure iio-sensor-proxy is running and accelerometer is available"
+    exit 1
+fi
+
+# Main loop
+echo "KDE Auto-rotation started for Chuwi Minibook X"
+echo "Monitoring accelerometer: $ACCEL_DEVICE"
+echo "Display: $DISPLAY_NAME"
+echo "Orientation offset: $ORIENTATION_OFFSET"
+echo "Threshold: $THRESHOLD (hysteresis: $HYSTERESIS_THRESHOLD)"
+echo "Stability requirement: $STABLE_THRESHOLD consecutive readings (~1.4 seconds)"
+echo "Check interval: 0.2 seconds"
+echo "Press Ctrl+C to stop"
+echo ""
+
+while true; do
+    # Read accelerometer values
+    read x y z <<< $(read_accelerometer)
+    
+    # Determine orientation with hysteresis
+    orientation=$(determine_orientation "$x" "$y" "$z" "$CURRENT_ROTATION")
+    
+    # Check if orientation has changed
+    if [ "$orientation" != "$CURRENT_ROTATION" ]; then
+        # Increment stable count for new orientation
+        STABLE_COUNT=$((STABLE_COUNT + 1))
+        
+        # Only change rotation after stable readings
+        if [ $STABLE_COUNT -ge $STABLE_THRESHOLD ]; then
+            echo "$(date): Rotating to $orientation (x=$x, y=$y, z=$z) [stable for $STABLE_COUNT readings]"
+            set_rotation "$orientation"
+            CURRENT_ROTATION="$orientation"
+            STABLE_COUNT=0  # Reset counter after successful rotation
+        else
+            echo "$(date): Detected $orientation but waiting for stability (x=$x, y=$y, z=$z) [stable: $STABLE_COUNT/$STABLE_THRESHOLD]"
+        fi
+    else
+        # Reset stable count if orientation hasn't changed
+        STABLE_COUNT=0
+    fi
+    
+    # Sleep for a short interval
+    sleep 0.2
+done
+EOF
+        chmod +x manual_installation/kde-autorotate
+        print_success "Autorotation script created in manual_installation/kde-autorotate"
+    fi
+    
+    # Copy systemd service
+    if [[ -f ~/.config/systemd/user/kde-autorotate.service ]]; then
+        cp ~/.config/systemd/user/kde-autorotate.service manual_installation/
+        print_success "Systemd service copied to manual_installation/kde-autorotate.service"
+    else
+        # Create the service content for manual installation
+        cat > manual_installation/kde-autorotate.service << 'EOF'
+[Unit]
+Description=KDE Auto-rotation Service for Chuwi Minibook X
+After=graphical-session.target
+Wants=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/kde-autorotate
+Restart=always
+RestartSec=5
+Environment=DISPLAY=:0
+Environment=XDG_SESSION_TYPE=wayland
+Environment=WAYLAND_DISPLAY=wayland-0
+
+[Install]
+WantedBy=default.target
+EOF
+        print_success "Systemd service created in manual_installation/kde-autorotate.service"
+    fi
+    
+    # Create GRUB configuration example
+    cat > manual_installation/grub_example.txt << 'EOF'
+# GRUB Configuration Example
+# Add these parameters to GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub:
+
+GRUB_CMDLINE_LINUX_DEFAULT="quiet video=dsi-1:panel_orientation=right_side_up fbcon=rotate:1"
+
+# After modifying /etc/default/grub, update GRUB with:
+# sudo grub2-mkconfig -o /boot/grub2/grub.cfg
+# sudo reboot
+EOF
+    print_success "GRUB configuration example created in manual_installation/grub_example.txt"
+    
+    # Create manual installation instructions
+    cat > manual_installation/INSTALLATION_INSTRUCTIONS.md << 'EOF'
+# Manual Installation Instructions
+
+This directory contains all the files needed for manual installation of Chuwi Minibook X rotation fixes.
+
+## Files Included
+
+- `kde-autorotate` - Autorotation script
+- `kde-autorotate.service` - Systemd service file
+- `grub_example.txt` - GRUB configuration example
+- `INSTALLATION_INSTRUCTIONS.md` - This file
+
+## Installation Steps
+
+### Option 1: GRUB Fixes Only
+
+1. **Backup your current GRUB configuration:**
+   ```bash
+   sudo cp /etc/default/grub /etc/default/grub.backup
+   ```
+
+2. **Edit GRUB configuration:**
+   ```bash
+   sudo nano /etc/default/grub
+   ```
+
+3. **Add rotation parameters to GRUB_CMDLINE_LINUX_DEFAULT:**
+   ```
+   GRUB_CMDLINE_LINUX_DEFAULT="quiet video=dsi-1:panel_orientation=right_side_up fbcon=rotate:1"
+   ```
+
+4. **Update GRUB:**
+   ```bash
+   sudo grub2-mkconfig -o /boot/grub2/grub.cfg
+   ```
+
+5. **Reboot:**
+   ```bash
+   sudo reboot
+   ```
+
+### Option 2: Autorotation Only
+
+1. **Install dependencies:**
+   ```bash
+   sudo dnf install bc plasma-workspace
+   sudo systemctl start iio-sensor-proxy
+   sudo systemctl enable iio-sensor-proxy
+   ```
+
+2. **Copy autorotation script:**
+   ```bash
+   mkdir -p ~/.local/bin
+   cp kde-autorotate ~/.local/bin/
+   chmod +x ~/.local/bin/kde-autorotate
+   ```
+
+3. **Copy systemd service:**
+   ```bash
+   mkdir -p ~/.config/systemd/user
+   cp kde-autorotate.service ~/.config/systemd/user/
+   ```
+
+4. **Enable and start service:**
+   ```bash
+   systemctl --user daemon-reload
+   systemctl --user enable kde-autorotate.service
+   systemctl --user start kde-autorotate.service
+   ```
+
+### Option 3: Both GRUB and Autorotation
+
+Follow both Option 1 and Option 2 above.
+
+## Verification
+
+### Check GRUB Configuration
+```bash
+grep "GRUB_CMDLINE_LINUX_DEFAULT" /etc/default/grub
+```
+
+### Check Autorotation Service
+```bash
+systemctl --user status kde-autorotate.service
+journalctl --user -u kde-autorotate.service -f
+```
+
+### Test Autorotation
+Rotate your device and check if the screen rotates automatically (with ~1.4 second delay).
+
+## Service Management
+
+```bash
+# Check status
+systemctl --user status kde-autorotate.service
+
+# Stop autorotation
+systemctl --user stop kde-autorotate.service
+
+# Start autorotation
+systemctl --user start kde-autorotate.service
+
+# View logs
+journalctl --user -u kde-autorotate.service -f
+
+# Disable auto-start
+systemctl --user disable kde-autorotate.service
+```
+
+## Troubleshooting
+
+### Autorotation not working
+1. Check accelerometer: `ls /sys/bus/iio/devices/`
+2. Check service status: `systemctl --user status kde-autorotate.service`
+3. Check logs: `journalctl --user -u kde-autorotate.service`
+
+### GRUB changes not applied
+1. Verify configuration: `grep "GRUB_CMDLINE_LINUX_DEFAULT" /etc/default/grub`
+2. Rebuild GRUB: `sudo grub2-mkconfig -o /boot/grub2/grub.cfg`
+3. Reboot: `sudo reboot`
+
+### Wrong rotation directions
+Edit `~/.local/bin/kde-autorotate` and adjust `ORIENTATION_OFFSET`:
+- `0` = No offset (default)
+- `1` = 90 degrees clockwise
+- `2` = 180 degrees
+- `3` = 90 degrees counter-clockwise
+
+Then restart: `systemctl --user restart kde-autorotate.service`
+
+## Recovery
+
+### Restore GRUB backup
+```bash
+sudo cp /etc/default/grub.backup /etc/default/grub
+sudo grub2-mkconfig -o /boot/grub2/grub.cfg
+sudo reboot
+```
+
+### Disable autorotation
+```bash
+systemctl --user stop kde-autorotate.service
+systemctl --user disable kde-autorotate.service
+```
+EOF
+    print_success "Manual installation instructions created in manual_installation/INSTALLATION_INSTRUCTIONS.md"
+    
+    echo
+    print_success "Files copied to manual_installation/ directory for manual installation"
+    echo
+    echo "Files created:"
+    echo "- kde-autorotate (autorotation script)"
+    echo "- kde-autorotate.service (systemd service)"
+    echo "- grub_example.txt (GRUB configuration example)"
+    echo "- INSTALLATION_INSTRUCTIONS.md (detailed installation guide)"
+    echo
+    echo "You can now manually install these files following the instructions in INSTALLATION_INSTRUCTIONS.md"
+}
+
 # Function to show final instructions
 show_final_instructions() {
     echo
-    print_success "Complete rotation fixes have been applied successfully!"
-    echo
-    echo "Applied fixes:"
-    echo "1. ✅ GRUB boot parameters for login screen rotation"
-    echo "2. ✅ KDE autorotation script with accelerometer monitoring"
-    echo "3. ✅ Systemd service for automatic autorotation startup"
-    echo "4. ✅ Wayland environment compatibility fixes"
-    echo "5. ✅ Enhanced error handling and debugging output"
-    echo
-    echo "Next steps:"
-    echo "1. Reboot your system: sudo reboot"
-    echo "2. After reboot, check if the boot screen appears correctly oriented"
-    echo "3. Verify that KDE desktop automatically rotates based on device orientation"
-    echo "4. Test rotating your device to confirm autorotation works"
-    echo
-    echo "Service management commands:"
-    echo "- Check status: systemctl --user status kde-autorotate.service"
-    echo "- Stop autorotation: systemctl --user stop kde-autorotate.service"
-    echo "- Start autorotation: systemctl --user start kde-autorotate.service"
-    echo "- View logs: journalctl --user -u kde-autorotate.service -f"
-    echo "- Disable auto-start: systemctl --user disable kde-autorotate.service"
-    echo
-    echo "Configuration files:"
-    echo "- Autorotation script: ~/.local/bin/kde-autorotate"
-    echo "- Systemd service: ~/.config/systemd/user/kde-autorotate.service"
-    echo "- GRUB backup: /etc/default/grub.backup"
-    echo
-    print_warning "A reboot is required for GRUB changes to take effect."
-    print_status "Autorotation will start automatically after login."
+    if [[ "$INSTALL_MANUAL" == "true" ]]; then
+        print_success "Files have been copied for manual installation!"
+        echo
+        echo "Files are available in the 'manual_installation' directory:"
+        echo "- kde-autorotate (autorotation script)"
+        echo "- kde-autorotate.service (systemd service)"
+        echo "- grub_example.txt (GRUB configuration example)"
+        echo "- INSTALLATION_INSTRUCTIONS.md (detailed installation guide)"
+        echo
+        echo "Follow the instructions in INSTALLATION_INSTRUCTIONS.md to complete the installation."
+    else
+        print_success "Rotation fixes have been applied successfully!"
+        echo
+        echo "Applied fixes:"
+        if [[ "$INSTALL_GRUB" == "true" ]]; then
+            echo "1. ✅ GRUB boot parameters for login screen rotation"
+        fi
+        if [[ "$INSTALL_AUTOROTATION" == "true" ]]; then
+            echo "2. ✅ KDE autorotation script with accelerometer monitoring"
+            echo "3. ✅ Systemd service for automatic autorotation startup"
+            echo "4. ✅ Wayland environment compatibility fixes"
+            echo "5. ✅ Enhanced error handling and debugging output"
+        fi
+        echo
+        echo "Next steps:"
+        if [[ "$INSTALL_GRUB" == "true" ]]; then
+            echo "1. Reboot your system: sudo reboot"
+            echo "2. After reboot, check if the boot screen appears correctly oriented"
+        fi
+        if [[ "$INSTALL_AUTOROTATION" == "true" ]]; then
+            echo "3. Verify that KDE desktop automatically rotates based on device orientation"
+            echo "4. Test rotating your device to confirm autorotation works"
+        fi
+        echo
+        if [[ "$INSTALL_AUTOROTATION" == "true" ]]; then
+            echo "Service management commands:"
+            echo "- Check status: systemctl --user status kde-autorotate.service"
+            echo "- Stop autorotation: systemctl --user stop kde-autorotate.service"
+            echo "- Start autorotation: systemctl --user start kde-autorotate.service"
+            echo "- View logs: journalctl --user -u kde-autorotate.service -f"
+            echo "- Disable auto-start: systemctl --user disable kde-autorotate.service"
+            echo
+            echo "Configuration files:"
+            echo "- Autorotation script: ~/.local/bin/kde-autorotate"
+            echo "- Systemd service: ~/.config/systemd/user/kde-autorotate.service"
+        fi
+        if [[ "$INSTALL_GRUB" == "true" ]]; then
+            echo "- GRUB backup: /etc/default/grub.backup"
+        fi
+        echo
+        if [[ "$INSTALL_GRUB" == "true" ]]; then
+            print_warning "A reboot is required for GRUB changes to take effect."
+        fi
+        if [[ "$INSTALL_AUTOROTATION" == "true" ]]; then
+            print_status "Autorotation will start automatically after login."
+        fi
+    fi
 }
 
 # Main execution
 main() {
-    echo "=========================================="
-    echo "Chuwi Minibook X Complete Rotation Fixes"
-    echo "=========================================="
-    echo "This script applies both GRUB fixes and KDE autorotation"
-    echo "Based on working configuration from KDE_Autorotation_Setup_Instructions.txt"
-    echo
+    # Show installation menu
+    show_installation_menu
     
-    # Pre-flight checks
-    check_root
-    check_sudo
-    check_prerequisites
+    # Pre-flight checks (only if not manual installation)
+    if [[ "$INSTALL_MANUAL" != "true" ]]; then
+        check_root
+        check_sudo
+        check_prerequisites
+    fi
     
-    # Apply GRUB fixes
-    backup_grub
-    modify_grub
-    update_grub
-    verify_grub
+    # Apply GRUB fixes if selected
+    if [[ "$INSTALL_GRUB" == "true" ]]; then
+        backup_grub
+        modify_grub
+        update_grub
+        verify_grub
+    fi
     
-    # Setup KDE autorotation
-    create_kde_autorotation_script
-    create_systemd_service
-    enable_autorotation_service
-    verify_autorotation
+    # Setup KDE autorotation if selected
+    if [[ "$INSTALL_AUTOROTATION" == "true" ]]; then
+        create_kde_autorotation_script
+        create_systemd_service
+        enable_autorotation_service
+        verify_autorotation
+    fi
+    
+    # Copy files for manual installation if selected
+    if [[ "$INSTALL_MANUAL" == "true" ]]; then
+        copy_files_for_manual_installation
+    fi
     
     # Show final instructions
     show_final_instructions
